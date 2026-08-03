@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>CountySuite Signature Formatter</title>
+<link rel="icon" type="image/icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+<div class="app-shell">
+    <header class="hero">
+        <div class="hero-content">
+            <div class="badge">Teleosoft Tools</div>
+            <h1>Signature Formatter</h1>
+            <p>Upload a signature image, detect the bounding markers, and generate a clean formatted signature ready for download.</p>
+        </div>
+    </header>
+
+    <section class="card">
+        <div class="card-header">
+            <div>
+                <h2>1. Upload and process</h2>
+                <p class="subtle">Start with a clear, straight-on image where all four signature bounding squares are visible.</p>
+            </div>
+        </div>
+
+        <input type="file" id="upload" hidden>
+
+        <div class="action-row">
+            <label for="upload" class="upload-btn">Select Signature Image</label>
+            <button id="downloadBtn" class="dev-only" onclick="downloadCanvas()" disabled>Download Original Canvas</button>
+        </div>
+    </section>
+    <section class="card dev-only">
+        <div class="card-header">
+            <div>
+                <h2>Developer settings</h2>
+                <p class="subtle">Fine tune marker detection, processing, and download behavior.</p>
+            </div>
+        </div>
+
+        <div class="settings-grid">
+            <label class="setting dev-only">
+                <input type="checkbox" id="debugMarkers">
+                Show detected markers
+            </label>
+
+            <label class="setting">
+                <input type="checkbox" id="autoDownload" checked>
+                Download formatted signature
+            </label>
+        </div>
+    </section>
+
+    <section class="card signature-preview dev-only">
+        <div class="card-header">
+            <div>
+                <h2>Developer marker crop preview</h2>
+                <p class="subtle">Review the original image and the legacy processed signature output.</p>
+            </div>
+        </div>
+
+        <div class="canvas-grid">
+            <div class="panel">
+                <h3>Original</h3>
+                <canvas id="inputCanvas"></canvas>
+            </div>
+
+            <div class="panel">
+                <h3>Old Processed Signature</h3>
+                <canvas id="outputCanvas"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-header">
+            <div>
+                <h2>2. Signature cleanup</h2>
+                <p class="subtle">Adjust stroke cleanup and thickness before downloading the final signature.</p>
+            </div>
+        </div>
+
+        <div class="controls">
+            <label>
+                <input type="checkbox" id="edgeCleanup">
+                Remove Edge Artifacts
+            </label>
+
+            <label>
+                <input type="checkbox" id="ImageProcessingVersion">
+                Thick Signature
+            </label>
+
+            <label>
+                Threshold
+                <input type="range" id="threshold" min="1" max="255" step="2" value="25">
+                <span id="thresholdValue">25</span>
+            </label>
+
+            <button id="downloadBtnp">Download Final Signature</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="container">
+            <div class="panel dev-only">
+                <h3>Original Threshold</h3>
+                <canvas id="ThresholdCanvasO"></canvas>
+            </div>
+
+            <div class="panel">
+                <h3>Processed Threshold</h3>
+                <canvas id="ThresholdCanvasP"></canvas>
+            </div>
+        </div>
+    </section>
+
+</div>
+<script src="imagetracer_v1.2.6.js"></script>
+<script src="opencv.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

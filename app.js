@@ -785,10 +785,10 @@ function ProcessThreshold() {
     const width = finalThresh.cols;
     const height = finalThresh.rows;
 		
-	const mattX = Number(RangeXSlider.value);
-	const mattY = Number(RangeYSlider.value);
+	const mattX = Number(RangeXSlider.value*2);
+	const mattY = Number(RangeYSlider.value*2);
 	
-	const mattScale = Number(marginSlider.value / 50);
+	const mattScale = Number(marginSlider.value / 1);
 
 	const displayWidth = finalThresh.cols * mattScale;
 	const displayHeight = finalThresh.rows * mattScale;

@@ -1,3 +1,15 @@
+// Set this to true when troubleshooting marker detection or threshold output.
+let DEV_MODE = false;
+console.log("DevMode:", DEV_MODE);
+
+const Dev_Check = document.getElementById('Dev');
+if (Dev_Check.checked) {
+	DEV_MODE = true;
+}
+
+console.log("DevMode:", DEV_MODE);
+console.log('Woops')
+
 function initializeDevMode() {
     document.body.classList.toggle('dev-mode', DEV_MODE);
 
@@ -19,8 +31,10 @@ function initializeLibraries() {
     console.log("ImageTracer:", TracerReady);
 }
 
-// Set this to true when troubleshooting marker detection or threshold output.
-const DEV_MODE = false;
+        const downloadBtn = document.getElementById("downloadBtn");
+        if (downloadBtn) {
+            downloadBtn.disabled = !DEV_MODE;
+        }
 
 let OpenCvReady = false;
 let TracerReady = false;
@@ -53,9 +67,18 @@ const outputCanvas = document.getElementById('outputCanvas');
 const inputCtx = inputCanvas.getContext('2d',{ willReadFrequently: true });
 	
 const thresholdSlider = document.getElementById('threshold');
+const marginSlider = document.getElementById('MarginButton');
+
+const RangeXSlider = document.getElementById('RangeXButton');
+const RangeYSlider = document.getElementById('RangeYButton');
+
 const thresholdValue = document.getElementById('thresholdValue');
 const edgeCleanup = document.getElementById('edgeCleanup');
 const downloadBtnp = document.getElementById('downloadBtnp');
+
+const marginamount = document.getElementById('MarginValue');
+const RangeXValue = document.getElementById('RangeXValue');
+const RangeYValue = document.getElementById('RangeYValue');
 
 const ThresholdCanvasO = document.getElementById('ThresholdCanvasO');
 const ThresholdCanvasP = document.getElementById('ThresholdCanvasP');
@@ -152,6 +175,42 @@ thresholdSlider.addEventListener('input', () => {
     }, 200);
 });
 
+marginSlider.addEventListener('input', () => {
+    marginamount.textContent = marginSlider.value;
+
+    if (uploaded<2) return;
+
+    clearTimeout(thresholdDebounceTimer);
+
+    thresholdDebounceTimer = setTimeout(() => {
+        Recalculate();
+    }, 200);
+});
+
+RangeXSlider.addEventListener('input', () => {
+    RangeXValue.textContent = RangeXSlider.value;
+
+    if (uploaded<2) return;
+
+    clearTimeout(thresholdDebounceTimer);
+
+    thresholdDebounceTimer = setTimeout(() => {
+        Recalculate();
+    }, 200);
+});
+
+RangeYSlider.addEventListener('input', () => {
+    RangeYValue.textContent = RangeYSlider.value;
+
+    if (uploaded<2) return;
+
+    clearTimeout(thresholdDebounceTimer);
+
+    thresholdDebounceTimer = setTimeout(() => {
+        Recalculate();
+    }, 200);
+});
+
 edgeCleanup.addEventListener('change', () => {
     if (uploaded===2) {
         ProcessThreshold();
@@ -163,6 +222,12 @@ ImageProcessingVersion.addEventListener('change', () => {
     if (uploaded===2) {
         Recalculate();
     }
+});
+
+Dev_Check.addEventListener('change', () => {
+	const DEV_MODE = Dev_Check.checked;
+	console.log("DevMode:", Dev_Check.checked);
+	initializeDevMode();
 });
 
 downloadBtnp.addEventListener('click', () => {
@@ -186,8 +251,6 @@ function processUploadedImageWhenReady(attempt = 0) {
     // Refresh these checks because OpenCV can finish initializing after this
     // script first runs.
     initializeLibraries();
-	console.log(OpenCvReady)
-	console.log(TracerReady)
     if (!OpenCvReady || !TracerReady) {
         if (attempt < 40) {
             setTimeout(() => processUploadedImageWhenReady(attempt + 1), 100);
@@ -721,11 +784,38 @@ function ProcessThreshold() {
 
     const width = finalThresh.cols;
     const height = finalThresh.rows;
+		
+	const mattX = Number(RangeXSlider.value);
+	const mattY = Number(RangeYSlider.value);
+	
+	const mattScale = Number(marginSlider.value / 50);
+
+	const displayWidth = finalThresh.cols * mattScale;
+	const displayHeight = finalThresh.rows * mattScale;
 
     ThresholdCanvasP.width = width;
     ThresholdCanvasP.height = height;
 	
-	cv.imshow(ThresholdCanvasP, finalThresh);
+	processedCtx.clearRect(0, 0, width, height);
+	
+	const mattCanvas = document.createElement("canvas");
+	mattCanvas.width = width;
+	mattCanvas.height = height;
+	
+	cv.imshow(mattCanvas, finalThresh);
+	
+	//processedCtx.drawImage(mattCanvas,mattX,mattY,displayWidth,displayHeight);
+	
+	const centerX = (width - displayWidth) / 2;
+	const centerY = (height - displayHeight) / 2;
+
+	processedCtx.drawImage(
+		mattCanvas,
+		centerX + mattX,
+		centerY + mattY,
+		displayWidth,
+		displayHeight
+	);
 	
     const imageData =
         processedCtx.getImageData(0, 0, width, height);
@@ -827,8 +917,6 @@ function Recalculate() {
 	if (!sigGray) return;
 
 	initializeProcessingBuffers()
-	
-	//need to figure out how to incorporate edge stuff here instead of after
 	
 	const threshold = parseInt(thresholdSlider.value);
 	cv.GaussianBlur(
@@ -1300,13 +1388,6 @@ function processSingleSignatureLegacy() {
 				outHeight
 			)
 		);
-
-		// ----------------------------- // CROP ENTIRE INTERIOR // ----------------------------- // Small inward margin 
-		const marginPercent = 0.015; // Shrink inward slightly
-		const marginX = Math.floor(outWidth * marginPercent); const marginY = Math.floor(outHeight * marginPercent); // Full interior crop 
-		const sigRect = new cv.Rect( marginX, marginY, outWidth - (marginX * 2), outHeight - (marginY * 2) );
-		let signature = warped.roi(sigRect);
-		
 		
 		// -----------------------------
 		// GRAYSCALE
@@ -1315,7 +1396,7 @@ function processSingleSignatureLegacy() {
 			new cv.Mat();
 
 		cv.cvtColor(
-			signature,
+			warped,
 			sigGray,
 			cv.COLOR_RGBA2GRAY
 		);
@@ -1376,9 +1457,6 @@ function processSingleSignatureLegacy() {
 
 			M.delete();
 			warped.delete();
-
-			signature.delete();
-			//sigGray.delete();
 			
 			resized.delete();
 		}
@@ -1444,6 +1522,7 @@ function processImage() {
                 new cv.Size(kernelSize, kernelSize)
             );
             cv.morphologyEx(thresh, thresh, cv.MORPH_OPEN, kernel);
+            cv.morphologyEx(thresh, thresh, cv.MORPH_CLOSE, kernel);
             kernel.delete();
         }
 
@@ -1471,6 +1550,7 @@ function processImage() {
         // Retain compatibility with a tightly cropped, single-signature image
         // if row grouping cannot be established.
         if (regions.length === 0 && markers.length >= 4 && markers.length <= 8) {
+			console.log('Issue Found, trying Emergency Format')
             const fallback = buildSingleRegionFallback(markers);
             if (fallback) regions = [fallback];
         }
@@ -2050,14 +2130,12 @@ function applySignatureRegion(region) {
     try {
         src = cv.imread(sourceImageCanvas);
         warped = warpSignatureRegion(src, region, outWidth, outHeight);
-
-        const marginX = Math.floor(outWidth * 0.005);
-        const marginY = Math.floor(outHeight * 0.005);
+		
         const sigRect = new cv.Rect(
-            marginX,
-            marginY,
-            outWidth - (marginX * 2),
-            outHeight - (marginY * 2)
+            0,
+            0,
+            outWidth,
+            outHeight
         );
         signature = warped.roi(sigRect);
 
@@ -2086,3 +2164,5 @@ function applySignatureRegion(region) {
         if (resized) resized.delete();
     }
 }
+
+updateUI();

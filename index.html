@@ -21,19 +21,15 @@
         <div class="card-header">
             <div>
                 <h2>1. Upload and process</h2>
-                <p class="subtle">Upload one signature box or a full sheet. Images and PDFs are supported.</p>
+                <p class="subtle">Start with a clear, straight-on image where all four signature bounding squares are visible.</p>
             </div>
         </div>
 
         <input type="file" id="upload" hidden>
 
         <div class="action-row">
-            <label for="upload" class="upload-btn">Select Signature Sheet or Image</label>
+            <label for="upload" class="upload-btn">Select Signature Image</label>
             <button id="downloadBtn" class="dev-only" onclick="downloadCanvas()" disabled>Download Original Canvas</button>
-			<label id="devOption2">
-			<input type="checkbox" id="Dev">
-				DEV
-			</label>
         </div>
     </section>
     <section class="card dev-only">
@@ -53,7 +49,7 @@
             <label class="setting">
                 <input type="checkbox" id="autoDownload" checked>
                 Download formatted signature
-            </label>		
+            </label>
         </div>
     </section>
 
@@ -93,7 +89,7 @@
             </label>
 
             <label>
-                <input type="checkbox" checked id="ImageProcessingVersion">
+                <input type="checkbox" id="ImageProcessingVersion">
                 Thick Signature
             </label>
 
@@ -101,24 +97,6 @@
                 Threshold
                 <input type="range" id="threshold" min="1" max="255" step="2" value="25">
                 <span id="thresholdValue">25</span>
-            </label>
-			
-			<label>
-				Zoom Amount
-				<input type="range" name="Margin" id="MarginButton" min=".5" max="2.5" step=".1" value="1">
-                <span id="MarginValue">1</span>
-            </label>
-
-			<label>
-				Horizontal
-				<input type="range" name="RangeX" id="RangeXButton" min="-300" max="300" step="1" value="0">
-                <span id="RangeXValue">0</span>
-            </label>
-			
-			<label>
-				Vertical
-				<input type="range" name="RangeY" id="RangeYButton" min="-75" max="75" step="1" value="0">
-                <span id="RangeYValue">0</span>
             </label>
 
             <button id="downloadBtnp">Download Final Signature</button>

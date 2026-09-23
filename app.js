@@ -1,3 +1,15 @@
+// Set this to true when troubleshooting marker detection or threshold output.
+let DEV_MODE = false;
+console.log("DevMode:", DEV_MODE);
+
+const Dev_Check = document.getElementById('Dev');
+if (Dev_Check.checked) {
+	DEV_MODE = true;
+}
+
+console.log("DevMode:", DEV_MODE);
+console.log('Woops')
+
 function initializeDevMode() {
     document.body.classList.toggle('dev-mode', DEV_MODE);
 
@@ -19,8 +31,10 @@ function initializeLibraries() {
     console.log("ImageTracer:", TracerReady);
 }
 
-// Set this to true when troubleshooting marker detection or threshold output.
-const DEV_MODE = false;
+        const downloadBtn = document.getElementById("downloadBtn");
+        if (downloadBtn) {
+            downloadBtn.disabled = !DEV_MODE;
+        }
 
 let OpenCvReady = false;
 let TracerReady = false;
@@ -53,9 +67,18 @@ const outputCanvas = document.getElementById('outputCanvas');
 const inputCtx = inputCanvas.getContext('2d',{ willReadFrequently: true });
 	
 const thresholdSlider = document.getElementById('threshold');
+const marginSlider = document.getElementById('MarginButton');
+
+const RangeXSlider = document.getElementById('RangeXButton');
+const RangeYSlider = document.getElementById('RangeYButton');
+
 const thresholdValue = document.getElementById('thresholdValue');
 const edgeCleanup = document.getElementById('edgeCleanup');
 const downloadBtnp = document.getElementById('downloadBtnp');
+
+const marginamount = document.getElementById('MarginValue');
+const RangeXValue = document.getElementById('RangeXValue');
+const RangeYValue = document.getElementById('RangeYValue');
 
 const ThresholdCanvasO = document.getElementById('ThresholdCanvasO');
 const ThresholdCanvasP = document.getElementById('ThresholdCanvasP');
@@ -65,6 +88,27 @@ processedCtx.imageSmoothingEnabled = true;
 processedCtx.imageSmoothingQuality = 'high';
 
 let thresholdDebounceTimer = null;
+
+// Signature position offset (in ThresholdCanvasP pixel space), now driven by
+// dragging the preview instead of the old RangeX/RangeY sliders.
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+let isDraggingSignature = false;
+let dragPointerStartX = 0;
+let dragPointerStartY = 0;
+let dragStartOffsetX = 0;
+let dragStartOffsetY = 0;
+
+// The actual visual center of the ink within the fixed-size canvas (recomputed
+// whenever finalThresh is refreshed). Used so zoom/scale anchors on the
+// signature itself rather than on the raw canvas midpoint.
+let signatureCenterX = 0;
+let signatureCenterY = 0;
+
+// True right after a new signature is loaded/selected; tells Recalculate() to
+// auto-center it once. Cleared after that so later threshold tweaks don't
+// wipe out a manual drag.
+let pendingAutoCenter = true;
 
 let uploaded = 0;
 // 0 = none
@@ -108,6 +152,9 @@ upload.addEventListener('change', async e => {
     signatureCandidates = [];
     selectedSignatureIndex = -1;
     uploaded = 0;
+    dragOffsetX = 0;
+    dragOffsetY = 0;
+    pendingAutoCenter = true;
     downloadBtnp.disabled = true;
     if (sigGray) {
         sigGray.delete();
@@ -152,6 +199,67 @@ thresholdSlider.addEventListener('input', () => {
     }, 200);
 });
 
+marginSlider.addEventListener('input', () => {
+    marginamount.textContent = marginSlider.value;
+
+    if (uploaded<2) return;
+
+    clearTimeout(thresholdDebounceTimer);
+
+    thresholdDebounceTimer = setTimeout(() => {
+        Recalculate();
+    }, 200);
+});
+
+// Dragging the preview now moves the signature (replaces the old RangeX/RangeY sliders).
+ThresholdCanvasP.style.touchAction = 'none'; // prevent the page from scrolling while dragging on touch
+ThresholdCanvasP.style.cursor = 'grab';
+
+ThresholdCanvasP.addEventListener('pointerdown', e => {
+    if (uploaded < 2) return;
+
+    isDraggingSignature = true;
+    dragPointerStartX = e.clientX;
+    dragPointerStartY = e.clientY;
+    dragStartOffsetX = dragOffsetX;
+    dragStartOffsetY = dragOffsetY;
+
+    ThresholdCanvasP.setPointerCapture(e.pointerId);
+    ThresholdCanvasP.style.cursor = 'grabbing';
+});
+
+ThresholdCanvasP.addEventListener('pointermove', e => {
+    if (!isDraggingSignature) return;
+
+    // Convert the mouse movement (CSS pixels) into canvas-internal pixels,
+    // since ThresholdCanvasP's drawing surface and its displayed size can differ.
+    const rect = ThresholdCanvasP.getBoundingClientRect();
+    const scaleX = ThresholdCanvasP.width / rect.width;
+    const scaleY = ThresholdCanvasP.height / rect.height;
+
+    dragOffsetX = dragStartOffsetX + (e.clientX - dragPointerStartX) * scaleX;
+    dragOffsetY = dragStartOffsetY + (e.clientY - dragPointerStartY) * scaleY;
+
+    if (RangeXValue) RangeXValue.textContent = Math.round(dragOffsetX);
+    if (RangeYValue) RangeYValue.textContent = Math.round(dragOffsetY);
+
+    ProcessThreshold();
+});
+
+function endSignatureDrag(e) {
+    if (!isDraggingSignature) return;
+
+    isDraggingSignature = false;
+    ThresholdCanvasP.style.cursor = 'grab';
+
+    if (ThresholdCanvasP.hasPointerCapture(e.pointerId)) {
+        ThresholdCanvasP.releasePointerCapture(e.pointerId);
+    }
+}
+
+ThresholdCanvasP.addEventListener('pointerup', endSignatureDrag);
+ThresholdCanvasP.addEventListener('pointercancel', endSignatureDrag);
+
 edgeCleanup.addEventListener('change', () => {
     if (uploaded===2) {
         ProcessThreshold();
@@ -163,6 +271,12 @@ ImageProcessingVersion.addEventListener('change', () => {
     if (uploaded===2) {
         Recalculate();
     }
+});
+
+Dev_Check.addEventListener('change', () => {
+	const DEV_MODE = Dev_Check.checked;
+	console.log("DevMode:", Dev_Check.checked);
+	initializeDevMode();
 });
 
 downloadBtnp.addEventListener('click', () => {
@@ -186,8 +300,6 @@ function processUploadedImageWhenReady(attempt = 0) {
     // Refresh these checks because OpenCV can finish initializing after this
     // script first runs.
     initializeLibraries();
-	console.log(OpenCvReady)
-	console.log(TracerReady)
     if (!OpenCvReady || !TracerReady) {
         if (attempt < 40) {
             setTimeout(() => processUploadedImageWhenReady(attempt + 1), 100);
@@ -721,11 +833,41 @@ function ProcessThreshold() {
 
     const width = finalThresh.cols;
     const height = finalThresh.rows;
+		
+	const mattX = dragOffsetX;
+	const mattY = dragOffsetY;
+	
+	const mattScale = Number(marginSlider.value / 1);
+
+	const displayWidth = finalThresh.cols * mattScale;
+	const displayHeight = finalThresh.rows * mattScale;
 
     ThresholdCanvasP.width = width;
     ThresholdCanvasP.height = height;
 	
-	cv.imshow(ThresholdCanvasP, finalThresh);
+	processedCtx.clearRect(0, 0, width, height);
+	
+	const mattCanvas = document.createElement("canvas");
+	mattCanvas.width = width;
+	mattCanvas.height = height;
+	
+	cv.imshow(mattCanvas, finalThresh);
+	
+	//processedCtx.drawImage(mattCanvas,mattX,mattY,displayWidth,displayHeight);
+	
+	// Anchored on the signature's own ink center (not the raw canvas midpoint)
+	// so zooming holds the signature in place instead of drifting toward
+	// whichever side of the canvas it happens to sit on.
+	const centerX = signatureCenterX * (1 - mattScale);
+	const centerY = signatureCenterY * (1 - mattScale);
+
+	processedCtx.drawImage(
+		mattCanvas,
+		centerX + mattX,
+		centerY + mattY,
+		displayWidth,
+		displayHeight
+	);
 	
     const imageData =
         processedCtx.getImageData(0, 0, width, height);
@@ -822,13 +964,45 @@ function initializeProcessingBuffers() {
 }
 
 
+//Finds the bounding-box center of the actual ink (dark pixels) inside a
+//single-channel Mat, so zooming/scaling can anchor on the signature itself
+//rather than on the raw canvas midpoint.
+function computeInkCenter(mat) {
+    const data = mat.data;
+    const width = mat.cols;
+    const height = mat.rows;
+    const inkThreshold = 250; // pixels darker than this count as "ink"
+
+    let minX = width, maxX = -1, minY = height, maxY = -1;
+
+    for (let y = 0; y < height; y++) {
+        const rowStart = y * width;
+        for (let x = 0; x < width; x++) {
+            if (data[rowStart + x] < inkThreshold) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+
+    // No ink found (e.g. a blank box) — fall back to the canvas's own center.
+    if (maxX < minX || maxY < minY) {
+        return { x: width / 2, y: height / 2 };
+    }
+
+    return {
+        x: (minX + maxX) / 2,
+        y: (minY + maxY) / 2
+    };
+}
+
 //This calculates the Threshold value and re-gives it to the ProcessThreshold() function
 function Recalculate() {
 	if (!sigGray) return;
 
 	initializeProcessingBuffers()
-	
-	//need to figure out how to incorporate edge stuff here instead of after
 	
 	const threshold = parseInt(thresholdSlider.value);
 	cv.GaussianBlur(
@@ -859,6 +1033,16 @@ function Recalculate() {
 	
 	cv.bitwise_not(finalThresh, finalThresh);
 	
+	const inkCenter = computeInkCenter(finalThresh);
+	signatureCenterX = inkCenter.x;
+	signatureCenterY = inkCenter.y;
+
+	if (pendingAutoCenter) {
+		dragOffsetX = (finalThresh.cols / 2) - signatureCenterX;
+		dragOffsetY = (finalThresh.rows / 2) - signatureCenterY;
+		pendingAutoCenter = false;
+	}
+
 	if (Reshow && DEV_MODE){
 		cv.imshow(
 			ThresholdCanvasO,
@@ -1300,13 +1484,6 @@ function processSingleSignatureLegacy() {
 				outHeight
 			)
 		);
-
-		// ----------------------------- // CROP ENTIRE INTERIOR // ----------------------------- // Small inward margin 
-		const marginPercent = 0.015; // Shrink inward slightly
-		const marginX = Math.floor(outWidth * marginPercent); const marginY = Math.floor(outHeight * marginPercent); // Full interior crop 
-		const sigRect = new cv.Rect( marginX, marginY, outWidth - (marginX * 2), outHeight - (marginY * 2) );
-		let signature = warped.roi(sigRect);
-		
 		
 		// -----------------------------
 		// GRAYSCALE
@@ -1315,7 +1492,7 @@ function processSingleSignatureLegacy() {
 			new cv.Mat();
 
 		cv.cvtColor(
-			signature,
+			warped,
 			sigGray,
 			cv.COLOR_RGBA2GRAY
 		);
@@ -1376,9 +1553,6 @@ function processSingleSignatureLegacy() {
 
 			M.delete();
 			warped.delete();
-
-			signature.delete();
-			//sigGray.delete();
 			
 			resized.delete();
 		}
@@ -1444,6 +1618,7 @@ function processImage() {
                 new cv.Size(kernelSize, kernelSize)
             );
             cv.morphologyEx(thresh, thresh, cv.MORPH_OPEN, kernel);
+            cv.morphologyEx(thresh, thresh, cv.MORPH_CLOSE, kernel);
             kernel.delete();
         }
 
@@ -1471,6 +1646,7 @@ function processImage() {
         // Retain compatibility with a tightly cropped, single-signature image
         // if row grouping cannot be established.
         if (regions.length === 0 && markers.length >= 4 && markers.length <= 8) {
+			console.log('Issue Found, trying Emergency Format')
             const fallback = buildSingleRegionFallback(markers);
             if (fallback) regions = [fallback];
         }
@@ -2050,14 +2226,12 @@ function applySignatureRegion(region) {
     try {
         src = cv.imread(sourceImageCanvas);
         warped = warpSignatureRegion(src, region, outWidth, outHeight);
-
-        const marginX = Math.floor(outWidth * 0.005);
-        const marginY = Math.floor(outHeight * 0.005);
+		
         const sigRect = new cv.Rect(
-            marginX,
-            marginY,
-            outWidth - (marginX * 2),
-            outHeight - (marginY * 2)
+            0,
+            0,
+            outWidth,
+            outHeight
         );
         signature = warped.roi(sigRect);
 
@@ -2076,6 +2250,9 @@ function applySignatureRegion(region) {
 
         Reshow = true;
         GlobalImageData = null;
+        dragOffsetX = 0;
+        dragOffsetY = 0;
+        pendingAutoCenter = true;
         uploaded = 1;
         Recalculate();
         downloadBtnp.disabled = false;
@@ -2086,3 +2263,5 @@ function applySignatureRegion(region) {
         if (resized) resized.delete();
     }
 }
+
+updateUI();
